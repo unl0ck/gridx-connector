@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/viessmann-gridbox-connector
+      url: https://pypi.org/p/gridx-connector
     steps:
     - uses: actions/checkout@v5
     - name: Set up Python

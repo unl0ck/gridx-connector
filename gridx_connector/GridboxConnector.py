@@ -3,7 +3,6 @@ import time
 import logging
 import os
 from authlib.integrations.requests_client import OAuth2Session
-
 class GridboxConnector:
     id_token: str = ""
     gateways: list[str] = []

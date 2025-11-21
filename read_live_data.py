@@ -1,9 +1,9 @@
-from viessmann_gridbox_connector import GridboxConnector
+from gridx_connector import GridboxConnector
 from importlib.resources import files
 import json
 import time
 loop = True
-config_file = files('viessmann_gridbox_connector').joinpath('config.json')
+config_file = files('gridx_connector').joinpath('eon-home.config.json')
 with open(config_file, 'r') as file:
     data = json.load(file)
     data["login"]["username"] = "username"

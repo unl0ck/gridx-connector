@@ -93,7 +93,7 @@ class GridboxConnector:
     
 
 if __name__ == "__main__":
-    config_file = files('viessmann_gridbox_connector').joinpath('config.json')
+    config_file = files('gridx_connector').joinpath('eon-home.config.json')
     with open(config_file, 'r') as file:
         data = json.load(file)
         connector = GridboxConnector(data)

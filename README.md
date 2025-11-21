@@ -1,6 +1,6 @@
-# Viessmann Gridbox Connector
+# Gridx Connector
 
-### **<h3 style="text-align: center;">This is not an official Viessmann library</h3>**
+### **<h3 style="text-align: center;">This is not an Offical Gridx Library</h3>**
 
 Harness the power of your photovoltaic system with the GridboxConnector library. This versatile tool taps into the same REST API as the official dashboard and app, providing you with direct access to your data from the cloud.<br>
 
@@ -9,40 +9,45 @@ Whether you're a developer looking to integrate solar data into your own project
 **Take control of your solar data with GridboxConnector, and unlock the full potential of your photovoltaic system.**<br><br>
 ![Screenshot vom mygridbox](images/screenshot.png)
 
+## Supported Realms
+* Viessmann (will shutdown end of 2025)
+* eon Home
+
 ## Installation
 
 ```script shell
-pip install viessmann-gridbox-connector
+pip install gridx-connector
 ```
 
 ## Usage
 
 You can use the CLI to retrieve live data from the Viessmann Gridbox API or use the GridboxConnector class in your own code. <br>
-Use your Login data from the App or from https://mygridbox.viessmann.com/login
+Use your Login data from the App or from https://company.gridx.de/login
 
 ### CLI
 
 ```script shell
-pip install viessmann-gridbox-connector
+pip install gridx-connector
 viessmann --username <username> --password <password>
 ```
 
 ### in your code
 
 ```python
-from viessmann_gridbox_connector import GridboxConnector
-from importlib.resources import path
+from gridx_connector import GridboxConnector
+from importlib.resources import files
 import json
+from supported_oem import SupportedOEM
 
-with path('viessmann_gridbox_connector', 'config.json') as config_file:
-    with open(config_file, 'r') as file:
-        data = json.load(file)
-        data["login"]["username"] = "username"
-        data["login"]["password"] = "password"
-        connector = GridboxConnector(data)
-        # Retrieve live data
-        live_data = connector.retrieve_live_data()
-        print(live_data)
+config_file = files('gridx_connector').joinpath(f'{oem}.config.json')
+with open(config_file, 'r') as file:
+    data = json.load(file)
+    data["login"]["username"] = username
+    data["login"]["password"] = password
+    connector = GridboxConnector(data)
+    # Retrieve live data
+    live_data = connector.retrieve_live_data()
+    return live_data
 ```
 
 ### Example Output
@@ -76,7 +81,7 @@ with path('viessmann_gridbox_connector', 'config.json') as config_file:
 
 ## Contributing
 
-If you'd like to contribute to viessmann-gridbox-connector, please follow these steps:
+If you'd like to contribute to gridx-connector, please follow these steps:
 
 Fork the repository.
 Create a new branch for your feature or bug fix.
