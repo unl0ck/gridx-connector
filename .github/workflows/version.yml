@@ -43,4 +43,3 @@ jobs:
               with:
                 tagging_message: v${{ env.TAG_NAME }}
                 commit_message: "Bump version: ${{ env.OLD_VERSIONE }} -> ${{ env.TAG_NAME }}"
-
