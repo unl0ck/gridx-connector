@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='gridx-connector',
-    version='1.0.0',
+    version='1.0.1',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     description="Connector for GridX to fetch live data from your Photovoltaic System",
