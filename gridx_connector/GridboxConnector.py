@@ -13,6 +13,7 @@ class GridboxConnector:
     password: str = ""
 
     def __init__(self, config, logger=None):
+        self.logger = logger
         if not logger:
             self.init_logging()
         self.config = config
