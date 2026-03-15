@@ -66,17 +66,20 @@ class GridboxConnector:
         self.get_new_token()
         self.get_gateway_id()
 
-    def get_gateway_id(self):
+    def get_gateway_id(self, max_retries=3, retry_delay=60):
         self.gateways.clear()
-        try:
-            response = requests.get(self.gateway_url, headers=self.get_header())
-            response_json = response.json()
-            for gateway in response_json:
-                self.gateways.append(gateway["system"]["id"])
-        except Exception as e:
-            self.logger.error(e)
-            time.sleep(60)
-            self.get_gateway_id()
+        for attempt in range(1, max_retries + 1):
+            try:
+                response = requests.get(self.gateway_url, headers=self.get_header())
+                response_json = response.json()
+                for gateway in response_json:
+                    self.gateways.append(gateway["system"]["id"])
+                return
+            except Exception as e:
+                self.logger.error(f"Failed to retrieve gateway IDs (attempt {attempt}/{max_retries}): {e}")
+                if attempt < max_retries:
+                    time.sleep(retry_delay)
+        self.logger.error("Failed to retrieve gateway IDs after %d attempts", max_retries)
 
     def get_gateways(self):
         return self.gateways
