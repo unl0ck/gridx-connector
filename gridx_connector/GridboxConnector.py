@@ -5,14 +5,14 @@ import os
 from authlib.integrations.requests_client import OAuth2Session
 class GridboxConnector:
     id_token: str = ""
-    gateways: list[str] = []
-    token: dict = {}
-    client: OAuth2Session = None
-    config: dict = {}
     username: str = ""
     password: str = ""
 
     def __init__(self, config, logger=None):
+        self.gateways = []
+        self.token = {}
+        self.client = None
+        self.config = {}
         if not logger:
             self.init_logging()
         self.config = config
