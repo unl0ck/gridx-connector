@@ -87,47 +87,40 @@ class GridboxConnector:
             if response.status_code == 200:
                 return response
             else:
-                self.logger.warning(f"Status Code {response.status_code} with response {response.json()}")
+                self.logger.warning(f"Live data request for system {id} failed: status {response.status_code}, response {response.json()}")
                 return response
         except Exception as e:
-            self.logger.error(e)
+            self.logger.error(f"Failed to retrieve live data for system {id}: {e}")
+            return None
 
     def retrieve_live_data(self):
         responses = []
         for id in self.gateways:
-            try:
-                response = self.retrieve_live_data_by_id(id)
-                if response.status_code == 200:
-                    response_json = response.json()
-                    responses.append(response_json)
-            except Exception as e:
-                self.logger.error(e)
+            response = self.retrieve_live_data_by_id(id)
+            if response is not None and response.status_code == 200:
+                responses.append(response.json())
         return responses
 
     def retrieve_historical_data_by_id(self, id, start, end, resolution='15m'):
-        interval = f"{start}/{end}"
         import urllib.parse
+        interval = f"{start}/{end}"
         encoded_string = urllib.parse.quote(interval)
-        self.historical_url_created = self.historical_url.format(id, encoded_string, resolution)
+        url = self.historical_url.format(id, encoded_string, resolution)
         try:
-            response = requests.get(self.historical_url_created, headers=self.get_header())
+            response = requests.get(url, headers=self.get_header())
             if response.status_code == 200:
                 return response
             else:
-                self.logger.warning("Requested url {}".format(self.historical_url_created))
-                self.logger.warning(f"Status Code {response.status_code} with response {response.json()}")
+                self.logger.warning(f"Historical data request for system {id} failed: status {response.status_code}, response {response.json()}")
                 return response
         except Exception as e:
-            self.logger.error(e)
-    
+            self.logger.error(f"Failed to retrieve historical data for system {id}: {e}")
+            return None
+
     def retrieve_historical_data(self, start, end, resolution='15m'):
         responses = []
         for id in self.gateways:
-            try:
-                response = self.retrieve_historical_data_by_id(id, start, end, resolution)
-                if response.status_code == 200:
-                    response_json = response.json()
-                    responses.append(response_json)
-            except Exception as e:
-                self.logger.error(e)
+            response = self.retrieve_historical_data_by_id(id, start, end, resolution)
+            if response is not None and response.status_code == 200:
+                responses.append(response.json())
         return responses
