@@ -2,7 +2,7 @@ import argparse
 from gridx_connector import GridboxConnector
 from importlib.resources import files
 import json
-from supported_oem import SupportedOEM
+from .supported_oem import SupportedOEM
 
 def retrieve_live_data(username: str, password: str, oem: str = SupportedOEM.VIESSMANN):
     config_file = files('gridx_connector').joinpath(f'{oem}.config.json')
