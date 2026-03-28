@@ -20,7 +20,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 OUTPUT_DIR="$TMP_DIR/out"
 mkdir -p "$OUTPUT_DIR"
 
-openapi-python-client generate \
+uv run openapi-python-client generate \
     --config APIDefinition/openapi-client-config.yml \
     --path APIDefinition/openapi.json \
     --output-path "$OUTPUT_DIR" \
