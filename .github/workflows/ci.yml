@@ -39,4 +39,12 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Run tests
-        run: uv run pytest tests/ -v
+        run: |
+          uv run pytest tests/ -v \
+            --cov=gridx_connector \
+            --cov-report=term-missing \
+            --cov-report=markdown:coverage.md
+
+      - name: Write coverage summary
+        if: always()
+        run: cat coverage.md >> $GITHUB_STEP_SUMMARY

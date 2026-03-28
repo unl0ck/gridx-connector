@@ -9,7 +9,7 @@ description = "Connector for GridX to fetch live and historical data from your P
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
-keywords = ["gridx", "photovoltaic", "solar", "energy", "eon-home"]
+keywords = ["gridx", "photovoltaic", "solar", "energy", "eon-home", "viessmann"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
@@ -31,6 +31,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-mock>=3.12",
+    "pytest-cov>=5.0",
     "ruff>=0.4",
     "openapi-python-client>=0.21",
     "bump-my-version>=0.23",
@@ -41,6 +42,7 @@ dev = [
 dev = [
     "pytest>=8.0",
     "pytest-mock>=3.12",
+    "pytest-cov>=5.0",
     "ruff>=0.4",
     "openapi-python-client>=0.21",
     "bump-my-version>=0.23",
