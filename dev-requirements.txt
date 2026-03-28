@@ -1,3 +1,0 @@
--r requirements.txt
-bump-my-version
-openapi-python-client

@@ -1,29 +1,48 @@
-import argparse
-from gridx_connector import GridboxConnector
-from importlib.resources import files
-import json
-from supported_oem import SupportedOEM
+from __future__ import annotations
 
-def retrieve_live_data(username: str, password: str, oem: str = SupportedOEM.VIESSMANN):
-    config_file = files('gridx_connector').joinpath(f'{oem}.config.json')
-    with open(config_file, 'r') as file:
-        data = json.load(file)
+import argparse
+import json
+import warnings
+from importlib.resources import files
+from typing import Any
+
+from .GridboxConnector import GridboxConnector
+from .supported_oem import SupportedOEM
+
+_ALL_OEMS: list[str] = ["eon-home"]
+
+
+def retrieve_live_data(username: str, password: str, oem: str = SupportedOEM.EON_HOME) -> list[dict[str, Any]]:
+    if oem == "viessmann":
+        warnings.warn(
+            "The Viessmann realm was shut down at end of 2025. Support for 'viessmann' OEM is deprecated.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    config_file = files("gridx_connector").joinpath("config", f"{oem}.config.json")
+    with open(config_file) as file:
+        data: dict[str, Any] = json.load(file)
         data["login"]["username"] = username
         data["login"]["password"] = password
         connector = GridboxConnector(data)
-        # Retrieve live data
-        live_data = connector.retrieve_live_data()
-        return live_data
+        return connector.retrieve_live_data()
 
-def main():
-    parser = argparse.ArgumentParser(description='Retrieve live data from GridX Gridbox.')
-    parser.add_argument('-u', '--username', required=True, help='The username to use.')
-    parser.add_argument('-p', '--password', required=True, help='The password to use.')
-    parser.add_argument('-o', '--oem', default=SupportedOEM.VIESSMANN, help='The OEM configuration to use.', choices=[SupportedOEM.VIESSMANN, SupportedOEM.EON_HOME])
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Retrieve live data from GridX Gridbox.")
+    parser.add_argument("-u", "--username", required=True, help="Login username.")
+    parser.add_argument("-p", "--password", required=True, help="Login password.")
+    parser.add_argument(
+        "-o",
+        "--oem",
+        default=SupportedOEM.EON_HOME,
+        choices=_ALL_OEMS,
+        help="OEM configuration to use (default: eon-home).",
+    )
     args = parser.parse_args()
-
     live_data = retrieve_live_data(args.username, args.password, args.oem)
     print(live_data)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

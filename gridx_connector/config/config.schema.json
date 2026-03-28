@@ -1,0 +1,88 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "GridX Connector OEM Configuration",
+    "description": "Configuration file for an OEM-specific gridX connector. API endpoint URLs (gateways, live, historical) are handled by the auto-generated gridx_connector_api client and no longer need to be specified here.",
+    "type": "object",
+    "required": [
+        "urls",
+        "login"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "urls": {
+            "type": "object",
+            "required": [
+                "login"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "login": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "OAuth2 token endpoint URL (Auth0).",
+                    "examples": [
+                        "https://gridx.eu.auth0.com/oauth/token"
+                    ]
+                }
+            }
+        },
+        "login": {
+            "type": "object",
+            "required": [
+                "grant_type",
+                "client_id",
+                "scope",
+                "realm"
+            ],
+            "properties": {
+                "grant_type": {
+                    "type": "string",
+                    "description": "OAuth2 grant type.",
+                    "examples": [
+                        "http://auth0.com/oauth/grant-type/password-realm"
+                    ]
+                },
+                "username": {
+                    "type": "string",
+                    "description": "Overridden at runtime via GRIDX_USERNAME env var."
+                },
+                "password": {
+                    "type": "string",
+                    "description": "Overridden at runtime via GRIDX_PASSWORD env var."
+                },
+                "audience": {
+                    "type": "string",
+                    "description": "OAuth2 audience.",
+                    "examples": [
+                        "my.gridx"
+                    ]
+                },
+                "client_id": {
+                    "type": "string",
+                    "description": "OAuth2 client ID."
+                },
+                "scope": {
+                    "type": "string",
+                    "description": "OAuth2 scopes (space-separated).",
+                    "examples": [
+                        "email openid offline_access"
+                    ]
+                },
+                "realm": {
+                    "type": "string",
+                    "description": "Auth0 database connection realm.",
+                    "examples": [
+                        "eon-home-authentication-db"
+                    ]
+                },
+                "client_secret": {
+                    "type": "string",
+                    "description": "OAuth2 client secret (may be empty for public clients)."
+                }
+            }
+        }
+    }
+}

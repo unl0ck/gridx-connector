@@ -1,0 +1,3 @@
+# Mark auto-generated API client as generated (GitHub language stats + code review)
+gridx_connector_api/** linguist-generated=true
+gridx_connector_api/** -diff
