@@ -233,9 +233,7 @@ class GridboxConnector:
             self.logger.error(e)
             return None
 
-    def retrieve_historical_data(
-        self, start: str, end: str, resolution: str = "15m"
-    ) -> list[dict[str, Any]]:
+    def retrieve_historical_data(self, start: str, end: str, resolution: str = "15m") -> list[dict[str, Any]]:
         """Fetch historical data for all discovered systems.
 
         Systems that return an error are skipped; see

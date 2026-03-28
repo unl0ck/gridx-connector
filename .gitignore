@@ -167,3 +167,4 @@ gridx-connector-api/
 # Generated API client — built automatically by hatch_build.py at wheel/sdist
 # build time, and locally via `bash scripts/generate_client.sh`.
 gridx_connector_api/
+coverage.md
