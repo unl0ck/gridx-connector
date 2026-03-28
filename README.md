@@ -208,6 +208,29 @@ for entry in historical:
 | Environment variables | Export `USERNAME=...` and `PASSWORD=...` — these override the config file |
 | CLI | Pass `-u <user> -p <pass>` on the command line |
 
+### Discover OAuth config automatically
+
+If you only know your website URL plus username/password, use the helper script to discover
+`client_id`, `realm`, `scope`, `audience`, and the token endpoint from the login page and JS bundles.
+
+```shell
+# Discovery only (prints candidates as JSON)
+python scripts/discover_oauth_config.py --site-url https://eon.gridx.de
+
+# Discovery + token validation + config file output (credentials redacted by default)
+python scripts/discover_oauth_config.py \
+    --site-url https://eon.gridx.de \
+    -u your@email.com \
+    -p yourpassword \
+    --validate \
+    --output eon.config.json
+```
+
+Notes:
+
+- Add `--include-credentials` to store username/password in the output file.
+- The generated JSON matches this project's config structure and can be used with `--config`.
+
 ## Examples
 
 Ready-to-run scripts are in the [`examples/`](examples/) directory:
