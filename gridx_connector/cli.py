@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import sys
 import warnings
@@ -8,6 +9,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
+from .async_connector import AsyncGridboxConnector
 from .GridboxConnector import GridboxConnector
 from .supported_oem import SupportedOEM
 
@@ -65,6 +67,11 @@ def retrieve_live_data(username: str, password: str, oem: str = SupportedOEM.EON
     return connector.retrieve_live_data()
 
 
+async def _retrieve_live_data_async(config: dict[str, Any]) -> list[dict[str, Any]]:
+    async with AsyncGridboxConnector(config) as connector:
+        return await connector.retrieve_live_data()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Retrieve live data from GridX Gridbox.",
@@ -88,9 +95,7 @@ def main() -> None:
         "--login-url",
         metavar="URL",
         help=(
-            "OAuth2 token endpoint, e.g.\n"
-            "  https://gridx.eu.auth0.com/oauth/token\n"
-            "Requires --client-id and --realm."
+            "OAuth2 token endpoint, e.g.\n  https://gridx.eu.auth0.com/oauth/token\nRequires --client-id and --realm."
         ),
     )
     source.add_argument(
@@ -113,6 +118,12 @@ def main() -> None:
         "--save-config",
         metavar="FILE",
         help="Save the resolved config (without credentials) to a JSON file for reuse.",
+    )
+    parser.add_argument(
+        "--async",
+        action="store_true",
+        dest="use_async",
+        help="Use asynchronous retrieval (useful for accounts with many systems).",
     )
 
     args = parser.parse_args()
@@ -150,8 +161,11 @@ def main() -> None:
         save_path.write_text(json.dumps(saveable, indent=2))
         print(f"Config saved to {save_path}", file=sys.stderr)
 
-    connector = GridboxConnector(config)
-    live_data = connector.retrieve_live_data()
+    if args.use_async:
+        live_data = asyncio.run(_retrieve_live_data_async(config))
+    else:
+        connector = GridboxConnector(config)
+        live_data = connector.retrieve_live_data()
     print(json.dumps(live_data, indent=2))
 
 

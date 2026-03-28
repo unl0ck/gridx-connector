@@ -142,10 +142,17 @@ class TestLoginUrl:
             sys,
             "argv",
             [
-                "gridx", "-u", "u", "-p", "p",
-                "--login-url", "https://gridx.eu.auth0.com/oauth/token",
-                "--client-id", "abc",
-                "--realm", "my-realm",
+                "gridx",
+                "-u",
+                "u",
+                "-p",
+                "p",
+                "--login-url",
+                "https://gridx.eu.auth0.com/oauth/token",
+                "--client-id",
+                "abc",
+                "--realm",
+                "my-realm",
             ],
         )
         mock_inst = mocker.MagicMock()
@@ -163,10 +170,17 @@ class TestLoginUrl:
             sys,
             "argv",
             [
-                "gridx", "-u", "testuser", "-p", "testpass",
-                "--login-url", "https://eon.gridx.de/oauth/token",
-                "--client-id", "test-client",
-                "--realm", "eon-home",
+                "gridx",
+                "-u",
+                "testuser",
+                "-p",
+                "testpass",
+                "--login-url",
+                "https://eon.gridx.de/oauth/token",
+                "--client-id",
+                "test-client",
+                "--realm",
+                "eon-home",
             ],
         )
         mock_inst = mocker.MagicMock()
@@ -221,11 +235,19 @@ class TestSaveConfig:
             sys,
             "argv",
             [
-                "gridx", "-u", "realuser", "-p", "realpass",
-                "--login-url", "https://gridx.eu.auth0.com/oauth/token",
-                "--client-id", "abc",
-                "--realm", "my-realm",
-                "--save-config", str(out_file),
+                "gridx",
+                "-u",
+                "realuser",
+                "-p",
+                "realpass",
+                "--login-url",
+                "https://gridx.eu.auth0.com/oauth/token",
+                "--client-id",
+                "abc",
+                "--realm",
+                "my-realm",
+                "--save-config",
+                str(out_file),
             ],
         )
         mock_inst = mocker.MagicMock()
@@ -239,3 +261,44 @@ class TestSaveConfig:
         assert saved["login"]["password"] != "realpass"
         assert saved["login"]["client_id"] == "abc"
         assert saved["login"]["realm"] == "my-realm"
+
+
+class TestAsyncMode:
+    def test_main_uses_async_mode_when_flag_is_present(self, monkeypatch, mocker):
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["gridx", "-u", "u", "-p", "p", "--async"],
+        )
+        load_mock = mocker.patch("gridx_connector.cli._load_oem_config", return_value={"login": {}})
+        async_result = [{"consumption": 123}]
+
+        def _fake_asyncio_run(coro):
+            coro.close()
+            return async_result
+
+        run_mock = mocker.patch("gridx_connector.cli.asyncio.run", side_effect=_fake_asyncio_run)
+        connector_ctor = mocker.patch("gridx_connector.cli.GridboxConnector")
+
+        main()
+
+        load_mock.assert_called_once_with("eon-home", "u", "p")
+        run_mock.assert_called_once()
+        connector_ctor.assert_not_called()
+
+    def test_main_defaults_to_sync_mode_without_flag(self, monkeypatch, mocker):
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["gridx", "-u", "u", "-p", "p"],
+        )
+        mocker.patch("gridx_connector.cli._load_oem_config", return_value={"login": {}})
+        mock_inst = mocker.MagicMock()
+        mock_inst.retrieve_live_data.return_value = []
+        connector_ctor = mocker.patch("gridx_connector.cli.GridboxConnector", return_value=mock_inst)
+        run_mock = mocker.patch("gridx_connector.cli.asyncio.run")
+
+        main()
+
+        connector_ctor.assert_called_once()
+        run_mock.assert_not_called()
