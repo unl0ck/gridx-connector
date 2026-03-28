@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gridx-connector"
-version = "1.0.1"
+version = "2.0.0"
 description = "Connector for GridX to fetch live and historical data from your Photovoltaic System"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -79,7 +79,7 @@ testpaths = ["tests"]
 addopts = "-v"
 
 [tool.bumpversion]
-current_version = "1.0.1"
+current_version = "2.0.0"
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
 serialize = ["{major}.{minor}.{patch}"]
 search = "{current_version}"
