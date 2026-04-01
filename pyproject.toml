@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "openapi-python-client>=0.21"]
 build-backend = "hatchling.build"
 
 [project]
@@ -73,6 +73,9 @@ include = [
     "APIDefinition/openapi-client-config.yml",
     "scripts/generate_client.sh",
 ]
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
 
 [tool.ruff]
 line-length = 120
