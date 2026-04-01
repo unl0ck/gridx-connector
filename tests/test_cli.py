@@ -7,7 +7,7 @@ import warnings
 
 import pytest
 
-from gridx_connector.cli import _build_config, main, retrieve_live_data
+from gridx_connector.cli import main, retrieve_live_data
 
 
 class TestArgparsing:

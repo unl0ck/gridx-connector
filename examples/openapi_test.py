@@ -6,6 +6,7 @@ import os
 from importlib.resources import files
 
 from authlib.integrations.requests_client import OAuth2Session
+
 from gridx_connector_api import AuthenticatedClient
 from gridx_connector_api.api.gateway.get_gateways import sync as get_gateways
 from gridx_connector_api.api.gateway.get_gateways_gateway_id import sync as get_gateway
