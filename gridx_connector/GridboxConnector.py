@@ -47,6 +47,8 @@ class GridboxConnector:
     password: str
     logger: logging.Logger
     _api_client: AuthenticatedClient | None
+    _initialized: bool
+    _token_refresh_count: int
 
     def __init__(self, config: dict[str, Any], logger: logging.Logger | None = None) -> None:
         """Initialise the connector.
@@ -56,7 +58,9 @@ class GridboxConnector:
         so that secrets can be injected at runtime without modifying the
         config file.
         """
-        if not logger:
+        if logger:
+            self.logger = logger
+        else:
             self.init_logging()
         self.config = config
         self.login_url: str = config["urls"]["login"]
@@ -66,14 +70,17 @@ class GridboxConnector:
         self.password = os.getenv("PASSWORD", self.login_body["password"])
         self.gateways = []  # instance-level list, not shared across instances
         self._api_client = None
+        self._initialized = False
+        self._token_refresh_count = 0
         self.init_auth()
 
     def init_logging(self) -> None:
         self.logger = logging.getLogger(__name__)
-        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s")
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        self.logger.addHandler(console_handler)
+        if not self.logger.handlers:
+            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s")
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(formatter)
+            self.logger.addHandler(console_handler)
 
     def set_loglevel(self, loglevel: str) -> None:
         self.logger.setLevel(logging.getLevelName(loglevel))
@@ -84,6 +91,13 @@ class GridboxConnector:
         ``AuthenticatedClient`` is immutable with respect to its bearer token,
         so a new instance must be created every time the token is refreshed.
         """
+        self._token_refresh_count += 1
+        self.logger.info(
+            "Fetching OAuth token (attempt #%d, realm=%s)",
+            self._token_refresh_count,
+            self.login_body.get("realm", "unknown"),
+        )
+
         self.token = self.client.fetch_token(
             self.login_url,
             username=self.login_body["username"],
@@ -99,14 +113,23 @@ class GridboxConnector:
             token=self.token["id_token"],
             raise_on_unexpected_status=False,
         )
-        self.logger.debug(f"Token expires at {self.token['expires_at']}")
+
+        expires_at = self.token.get("expires_at")
+        if expires_at is not None:
+            ttl_seconds = max(0, int(float(expires_at) - time.time()))
+            self.logger.debug("Token acquired successfully (expires in %ss).", ttl_seconds)
 
     def ensure_valid_token(self) -> None:
         """Refresh the token when it has expired or is not yet set."""
         expires_at: float | None = self.token.get("expires_at")
         if expires_at is None or expires_at < time.time():
-            self.logger.info("Token expired or missing, refreshing...")
+            reason = "missing-token" if expires_at is None else "expired-token"
+            self.logger.info("Token invalid (%s), refreshing now.", reason)
             self.get_new_token()
+            return
+
+        ttl_seconds = max(0, int(float(expires_at) - time.time()))
+        self.logger.debug("Token is still valid for %ss; skipping refresh.", ttl_seconds)
 
     def _get_api_client(self) -> AuthenticatedClient:
         """Return a ready-to-use ``AuthenticatedClient``, refreshing if needed.
@@ -119,13 +142,26 @@ class GridboxConnector:
         assert self._api_client is not None
         return self._api_client
 
-    def init_auth(self) -> None:
+    def init_auth(self, force: bool = False) -> None:
         """Create the OAuth2 session, fetch the initial token and load system IDs."""
+        if self._initialized and not force:
+            self.logger.debug("Authentication init skipped: connector already initialized.")
+            return
+
+        started = time.perf_counter()
         client_id: str = self.login_body["client_id"]
         client_secret: str = self.login_body["client_secret"]
         self.client = OAuth2Session(client_id, client_secret, scope=self.login_body["scope"])
         self.get_new_token()
         self.get_gateway_id()
+        self._initialized = True
+        elapsed = time.perf_counter() - started
+        self.logger.info(
+            "Connector auth initialized in %.2fs (%d systems discovered, %d token fetches).",
+            elapsed,
+            len(self.gateways),
+            self._token_refresh_count,
+        )
 
     def get_gateway_id(self) -> None:
         """Populate ``self.gateways`` with the IDs of all registered systems.
@@ -144,8 +180,9 @@ class GridboxConnector:
                     system_id = system.additional_properties.get("id")
                     if system_id:
                         self.gateways.append(str(system_id))
+            self.logger.debug("Discovered %d systems.", len(self.gateways))
         except Exception as e:
-            self.logger.error(e)
+            self.logger.exception("Failed to discover systems: %s", e)
             time.sleep(60)
             self.get_gateway_id()
 

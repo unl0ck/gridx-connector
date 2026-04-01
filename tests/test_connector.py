@@ -34,6 +34,15 @@ class TestInit:
         c2 = GridboxConnector(eon_home_config)
         assert c1.gateways is not c2.gateways
 
+    def test_init_auth_is_idempotent_without_force(self, connector, mocker):
+        token_spy = mocker.patch.object(connector, "get_new_token")
+        gateway_spy = mocker.patch.object(connector, "get_gateway_id")
+
+        connector.init_auth()
+
+        token_spy.assert_not_called()
+        gateway_spy.assert_not_called()
+
 
 class TestTokenHandling:
     def test_ensure_valid_token_skips_when_fresh(self, connector, mocker):

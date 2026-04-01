@@ -32,8 +32,18 @@ class AsyncGridboxConnector:
     password: str
     logger: logging.Logger
     _api_client: AuthenticatedClient | None
+    _httpx_client: httpx.AsyncClient | None
+    _owns_httpx_client: bool
+    _initialized: bool
+    _token_refresh_count: int
 
-    def __init__(self, config: dict[str, Any], logger: logging.Logger | None = None) -> None:
+    def __init__(
+        self,
+        config: dict[str, Any],
+        logger: logging.Logger | None = None,
+        httpx_client: httpx.AsyncClient | None = None,
+        owns_httpx_client: bool = False,
+    ) -> None:
         if logger:
             self.logger = logger
         else:
@@ -46,29 +56,70 @@ class AsyncGridboxConnector:
         self.gateways = []
         self.token = {}
         self._api_client = None
+        self._httpx_client = httpx_client
+        self._owns_httpx_client = owns_httpx_client
+        self._initialized = False
+        self._token_refresh_count = 0
         self._token_lock = asyncio.Lock()
+        self._init_lock = asyncio.Lock()
 
     @classmethod
-    async def create(cls, config: dict[str, Any], logger: logging.Logger | None = None) -> AsyncGridboxConnector:
-        connector = cls(config=config, logger=logger)
+    async def create(
+        cls,
+        config: dict[str, Any],
+        logger: logging.Logger | None = None,
+        httpx_client: httpx.AsyncClient | None = None,
+        owns_httpx_client: bool = False,
+    ) -> AsyncGridboxConnector:
+        connector = cls(
+            config=config,
+            logger=logger,
+            httpx_client=httpx_client,
+            owns_httpx_client=owns_httpx_client,
+        )
         await connector.initialize()
         return connector
 
-    async def initialize(self) -> None:
-        await self.get_new_token()
-        await self.get_gateway_id()
+    async def initialize(self, force: bool = False) -> None:
+        async with self._init_lock:
+            if self._initialized and not force:
+                self.logger.debug("Initialization skipped: connector already initialized.")
+                return
+
+            started = time.perf_counter()
+            reason = "forced-reinitialize" if force and self._initialized else "initialization"
+            await self.get_new_token(reason=reason)
+            await self.get_gateway_id()
+            self._initialized = True
+
+            elapsed = time.perf_counter() - started
+            self.logger.info(
+                "Async connector initialized in %.2fs (%d systems discovered, %d token fetches).",
+                elapsed,
+                len(self.gateways),
+                self._token_refresh_count,
+            )
 
     def init_logging(self) -> None:
         self.logger = logging.getLogger(__name__)
-        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s")
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        self.logger.addHandler(console_handler)
+        if not self.logger.handlers:
+            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s")
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(formatter)
+            self.logger.addHandler(console_handler)
 
     def set_loglevel(self, loglevel: str) -> None:
         self.logger.setLevel(logging.getLevelName(loglevel))
 
-    async def get_new_token(self) -> None:
+    async def get_new_token(self, reason: str = "refresh") -> None:
+        self._token_refresh_count += 1
+        self.logger.info(
+            "Fetching OAuth token (%s, attempt #%d, realm=%s)",
+            reason,
+            self._token_refresh_count,
+            self.login_body.get("realm", "unknown"),
+        )
+
         payload = {
             "username": self.username,
             "password": self.password,
@@ -80,10 +131,15 @@ class AsyncGridboxConnector:
             "client_secret": self.login_body.get("client_secret", ""),
         }
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(self.login_url, data=payload)
+        if self._httpx_client is not None:
+            response = await self._httpx_client.post(self.login_url, data=payload)
             response.raise_for_status()
             token = response.json()
+        else:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(self.login_url, data=payload)
+                response.raise_for_status()
+                token = response.json()
 
         expires_at = token.get("expires_at")
         if expires_at is None and token.get("expires_in") is not None:
@@ -99,20 +155,38 @@ class AsyncGridboxConnector:
             token=bearer,
             raise_on_unexpected_status=False,
         )
+
+        if self._httpx_client is not None:
+            # Reuse injected client for API calls and update auth header on refresh.
+            auth_value = f"{self._api_client.prefix} {self._api_client.token}"
+            self._httpx_client.headers[self._api_client.auth_header_name] = auth_value
+            self._api_client.set_async_httpx_client(self._httpx_client)
+
         if token.get("expires_at"):
-            self.logger.debug(f"Token expires at {token['expires_at']}")
+            ttl_seconds = max(0, int(float(token["expires_at"]) - time.time()))
+            self.logger.debug("Token acquired successfully (expires in %ss).", ttl_seconds)
 
     async def ensure_valid_token(self) -> None:
         expires_at = self.token.get("expires_at")
         if expires_at is not None and expires_at >= time.time() and self._api_client is not None:
+            ttl_seconds = max(0, int(float(expires_at) - time.time()))
+            self.logger.debug("Token is still valid for %ss; skipping refresh.", ttl_seconds)
             return
 
         async with self._token_lock:
             expires_at = self.token.get("expires_at")
             if expires_at is not None and expires_at >= time.time() and self._api_client is not None:
+                ttl_seconds = max(0, int(float(expires_at) - time.time()))
+                self.logger.debug("Token was refreshed by another task (%ss remaining).", ttl_seconds)
                 return
-            self.logger.info("Token expired or missing, refreshing...")
-            await self.get_new_token()
+
+            if expires_at is None:
+                reason = "missing-token"
+            else:
+                reason = "expired-token"
+
+            self.logger.info("Token invalid (%s), refreshing now.", reason)
+            await self.get_new_token(reason=reason)
 
     async def _get_api_client(self) -> AuthenticatedClient:
         await self.ensure_valid_token()
@@ -128,8 +202,9 @@ class AsyncGridboxConnector:
                     system_id = system.additional_properties.get("id")
                     if system_id:
                         self.gateways.append(str(system_id))
+            self.logger.debug("Discovered %d systems.", len(self.gateways))
         except Exception as exc:
-            self.logger.error(exc)
+            self.logger.exception("Failed to discover systems: %s", exc)
 
     def get_gateways(self) -> list[str]:
         return self.gateways
@@ -212,8 +287,14 @@ class AsyncGridboxConnector:
         return parsed
 
     async def close(self) -> None:
+        if self._httpx_client is not None and self._owns_httpx_client:
+            self.logger.debug("Closing owned injected async HTTP client.")
+            await self._httpx_client.aclose()
+            return
+
         if self._api_client is None:
             return
+        self.logger.debug("Closing async API client.")
         await self._api_client.get_async_httpx_client().aclose()
 
     async def __aenter__(self) -> AsyncGridboxConnector:

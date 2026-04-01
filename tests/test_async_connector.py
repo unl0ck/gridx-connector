@@ -7,6 +7,7 @@ from http import HTTPStatus
 import pytest
 
 from gridx_connector.async_connector import AsyncGridboxConnector
+from gridx_connector_api import AuthenticatedClient
 from tests.conftest import MOCK_HISTORICAL_DATA, MOCK_LIVE_DATA, MOCK_SYSTEM_IDS
 
 
@@ -56,13 +57,27 @@ async def test_initialize_populates_gateways(eon_home_config, mocker):
 async def test_ensure_valid_token_refreshes_when_expired(eon_home_config, mocker):
     connector = AsyncGridboxConnector(eon_home_config)
     connector.token = {"expires_at": time.time() - 1}
-    connector._api_client = object()
+    connector._api_client = mocker.Mock(spec=AuthenticatedClient)
 
     refresh_mock = mocker.patch.object(connector, "get_new_token", new=mocker.AsyncMock())
 
     await connector.ensure_valid_token()
 
     refresh_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_initialize_is_idempotent_and_fetches_token_once(eon_home_config, mocker):
+    connector = AsyncGridboxConnector(eon_home_config)
+
+    token_mock = mocker.patch.object(connector, "get_new_token", new=mocker.AsyncMock())
+    gateway_mock = mocker.patch.object(connector, "get_gateway_id", new=mocker.AsyncMock())
+
+    await connector.initialize()
+    await connector.initialize()
+
+    token_mock.assert_awaited_once()
+    gateway_mock.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -118,3 +133,48 @@ async def test_retrieve_historical_data_by_id_invalid_resolution_falls_back(eon_
 
     assert result == MOCK_HISTORICAL_DATA
     assert historical_mock.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_get_new_token_uses_injected_httpx_client(eon_home_config, mocker):
+    injected_client = mocker.AsyncMock()
+    injected_client.post.return_value = _mock_token_response(mocker)
+
+    connector = AsyncGridboxConnector(
+        eon_home_config,
+        httpx_client=injected_client,
+        owns_httpx_client=False,
+    )
+
+    await connector.get_new_token()
+
+    injected_client.post.assert_awaited_once()
+    assert connector._api_client is not None
+
+
+@pytest.mark.asyncio
+async def test_close_closes_only_owned_injected_client(eon_home_config, mocker):
+    injected_client = mocker.AsyncMock()
+    connector = AsyncGridboxConnector(
+        eon_home_config,
+        httpx_client=injected_client,
+        owns_httpx_client=True,
+    )
+
+    await connector.close()
+
+    injected_client.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_close_does_not_close_unowned_injected_client(eon_home_config, mocker):
+    injected_client = mocker.AsyncMock()
+    connector = AsyncGridboxConnector(
+        eon_home_config,
+        httpx_client=injected_client,
+        owns_httpx_client=False,
+    )
+
+    await connector.close()
+
+    injected_client.aclose.assert_not_awaited()
