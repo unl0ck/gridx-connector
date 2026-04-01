@@ -1,0 +1,70 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any, TypeVar
+
+from attrs import define as _attrs_define
+from attrs import field as _attrs_field
+
+from ..types import UNSET, Unset
+
+T = TypeVar("T", bound="GetSystemsSystemIDHistoricalMeasurementsDataItemMeasurementGridMeasurementGridMeterReading")
+
+
+@_attrs_define
+class GetSystemsSystemIDHistoricalMeasurementsDataItemMeasurementGridMeasurementGridMeterReading:
+    """
+    Attributes:
+        feed_in (float | Unset):
+        supply (float | Unset):
+    """
+
+    feed_in: float | Unset = UNSET
+    supply: float | Unset = UNSET
+    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        feed_in = self.feed_in
+
+        supply = self.supply
+
+        field_dict: dict[str, Any] = {}
+        field_dict.update(self.additional_properties)
+        field_dict.update({})
+        if feed_in is not UNSET:
+            field_dict["feedIn"] = feed_in
+        if supply is not UNSET:
+            field_dict["supply"] = supply
+
+        return field_dict
+
+    @classmethod
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        d = dict(src_dict)
+        feed_in = d.pop("feedIn", UNSET)
+
+        supply = d.pop("supply", UNSET)
+
+        get_systems_system_id_historical_measurements_data_item_measurement_grid_measurement_grid_meter_reading = cls(
+            feed_in=feed_in,
+            supply=supply,
+        )
+
+        get_systems_system_id_historical_measurements_data_item_measurement_grid_measurement_grid_meter_reading.additional_properties = d
+        return get_systems_system_id_historical_measurements_data_item_measurement_grid_measurement_grid_meter_reading
+
+    @property
+    def additional_keys(self) -> list[str]:
+        return list(self.additional_properties.keys())
+
+    def __getitem__(self, key: str) -> Any:
+        return self.additional_properties[key]
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        self.additional_properties[key] = value
+
+    def __delitem__(self, key: str) -> None:
+        del self.additional_properties[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.additional_properties
