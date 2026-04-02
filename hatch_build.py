@@ -1,4 +1,11 @@
-"""Build hook to generate gridx_connector_api during package builds."""
+"""Build hook to generate gridx_connector_api during package builds.
+
+gridx_connector_api/ is normally committed to the repository so no
+regeneration is needed at build time.  This hook only runs the generator
+when the directory is missing (e.g. a fresh checkout that predates the
+committed package).  Run ``bash scripts/generate_client.sh`` manually
+whenever the OpenAPI definition changes and commit the result.
+"""
 
 from __future__ import annotations
 
@@ -12,13 +19,15 @@ from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
 
 class CustomBuildHook(BuildHookInterface):
-    """Generate the OpenAPI client package before building artifacts."""
+    """Generate the OpenAPI client package when it is not already present."""
 
     def initialize(self, version: str, build_data: dict) -> None:
         root = Path(self.root)
         package_dir = root / "gridx_connector_api"
-        if package_dir.exists():
-            shutil.rmtree(package_dir)
+
+        # Skip generation if the package is already present (normal case).
+        if package_dir.exists() and any(package_dir.iterdir()):
+            return
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_dir = Path(tmp_dir) / "out"
