@@ -1,4 +1,7 @@
-name: Regenerate API Client
+# gridx_connector_api/ is not committed to the repository.
+# This workflow validates that the client can be generated and all tests
+# still pass whenever the OpenAPI definition changes.
+name: Validate API Client Generation
 
 on:
   push:
@@ -8,7 +11,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  generate:
+  validate:
     runs-on: ubuntu-latest
 
     steps:

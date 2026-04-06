@@ -1,10 +1,12 @@
 """Build hook to generate gridx_connector_api during package builds.
 
-gridx_connector_api/ is normally committed to the repository so no
-regeneration is needed at build time.  This hook only runs the generator
-when the directory is missing (e.g. a fresh checkout that predates the
-committed package).  Run ``bash scripts/generate_client.sh`` manually
-whenever the OpenAPI definition changes and commit the result.
+gridx_connector_api/ is NOT committed to the repository.  It is generated
+in CI/CD and locally before building.  This hook runs the generator whenever
+the directory is absent so that ``uv build`` / ``pip install -e .`` works
+without a separate manual step.
+
+Locally:  run ``bash scripts/generate_client.sh`` after cloning.
+In CI:    the pipeline generates the client before calling ``uv build``.
 """
 
 from __future__ import annotations
