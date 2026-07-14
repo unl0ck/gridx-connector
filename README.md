@@ -131,8 +131,8 @@ The diagram below shows the full journey from credentials to measurements.
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  1. Load config                                             │
-│     Read eon-home.config.json (or set USERNAME / PASSWORD   │
-│     env vars to avoid storing credentials in a file).       │
+│     Read eon-home.config.json (or set GRIDX_USERNAME /      │
+│     GRIDX_PASSWORD env vars to avoid credentials in a file).│
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
@@ -173,7 +173,7 @@ from gridx_connector import GridboxConnector, SupportedOEM
 config_path = files("gridx_connector").joinpath("config", f"{SupportedOEM.EON_HOME}.config.json")
 config = json.loads(config_path.read_text())
 
-# Inject credentials (or set USERNAME / PASSWORD env vars instead)
+# Inject credentials (or set GRIDX_USERNAME / GRIDX_PASSWORD env vars instead)
 config["login"]["username"] = "your@email.com"
 config["login"]["password"] = "yourpassword"
 
@@ -205,7 +205,7 @@ for entry in historical:
 | Option | How |
 |---|---|
 | Config file | Set `login.username` / `login.password` in `eon-home.config.json` |
-| Environment variables | Export `USERNAME=...` and `PASSWORD=...` — these override the config file |
+| Environment variables | Export `GRIDX_USERNAME=...` and `GRIDX_PASSWORD=...` — these override the config file |
 | CLI | Pass `-u <user> -p <pass>` on the command line |
 
 ### Discover OAuth config automatically

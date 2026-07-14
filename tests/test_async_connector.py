@@ -11,11 +11,6 @@ from gridx_connector_api import AuthenticatedClient
 from tests.conftest import MOCK_HISTORICAL_DATA, MOCK_LIVE_DATA, MOCK_SYSTEM_IDS
 
 
-class _MockSystem:
-    def __init__(self, system_id: str) -> None:
-        self.additional_properties = {"id": system_id}
-
-
 def _mock_token_response(mocker):
     response = mocker.Mock()
     response.raise_for_status.return_value = None
@@ -27,7 +22,7 @@ def _mock_token_response(mocker):
     return response
 
 
-def _mock_api_response(mocker, payload: dict, status: int = 200):
+def _mock_api_response(mocker, payload, status: int = 200):
     response = mocker.Mock()
     response.status_code = HTTPStatus(status)
     response.content = json.dumps(payload).encode()
@@ -45,12 +40,34 @@ async def test_initialize_populates_gateways(eon_home_config, mocker):
     async_ctx.__aexit__.return_value = None
     mocker.patch("gridx_connector.async_connector.httpx.AsyncClient", return_value=async_ctx)
 
-    systems = [_MockSystem(system_id) for system_id in MOCK_SYSTEM_IDS]
-    mocker.patch("gridx_connector.async_connector._get_systems_async", new=mocker.AsyncMock(return_value=systems))
+    systems_response = _mock_api_response(mocker, [{"id": system_id} for system_id in MOCK_SYSTEM_IDS])
+    mocker.patch(
+        "gridx_connector.async_connector._get_systems_async",
+        new=mocker.AsyncMock(return_value=systems_response),
+    )
 
     await connector.initialize()
 
     assert connector.get_gateways() == MOCK_SYSTEM_IDS
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [(401, PermissionError), (403, PermissionError), (500, RuntimeError)],
+)
+async def test_get_gateway_id_raises_on_error_status(eon_home_config, mocker, status, expected):
+    connector = AsyncGridboxConnector(eon_home_config)
+
+    systems_response = _mock_api_response(mocker, {}, status=status)
+    mocker.patch(
+        "gridx_connector.async_connector._get_systems_async",
+        new=mocker.AsyncMock(return_value=systems_response),
+    )
+    mocker.patch.object(connector, "_get_api_client", new=mocker.AsyncMock(return_value=mocker.Mock()))
+
+    with pytest.raises(expected):
+        await connector.get_gateway_id()
 
 
 @pytest.mark.asyncio
@@ -104,13 +121,105 @@ async def test_retrieve_live_data_returns_all_non_null_results(eon_home_config, 
 async def test_retrieve_live_data_by_id_returns_none_on_non_200(eon_home_config, mocker):
     connector = AsyncGridboxConnector(eon_home_config)
 
-    api_response = _mock_api_response(mocker, MOCK_LIVE_DATA, status=403)
+    api_response = _mock_api_response(mocker, MOCK_LIVE_DATA, status=500)
     mocker.patch("gridx_connector.async_connector._get_live_async", new=mocker.AsyncMock(return_value=api_response))
     mocker.patch.object(connector, "_get_api_client", new=mocker.AsyncMock(return_value=mocker.Mock()))
 
     result = await connector.retrieve_live_data_by_id(MOCK_SYSTEM_IDS[0])
 
     assert result is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 403])
+async def test_retrieve_live_data_by_id_raises_on_auth_status(eon_home_config, mocker, status):
+    connector = AsyncGridboxConnector(eon_home_config)
+
+    api_response = _mock_api_response(mocker, {}, status=status)
+    mocker.patch("gridx_connector.async_connector._get_live_async", new=mocker.AsyncMock(return_value=api_response))
+    mocker.patch.object(connector, "_get_api_client", new=mocker.AsyncMock(return_value=mocker.Mock()))
+
+    with pytest.raises(PermissionError):
+        await connector.retrieve_live_data_by_id(MOCK_SYSTEM_IDS[0])
+
+
+@pytest.mark.asyncio
+async def test_retrieve_live_data_propagates_auth_error(eon_home_config, mocker):
+    connector = AsyncGridboxConnector(eon_home_config)
+    connector.gateways = MOCK_SYSTEM_IDS.copy()
+
+    mocker.patch.object(
+        connector,
+        "retrieve_live_data_by_id",
+        side_effect=PermissionError("expired credentials"),
+    )
+
+    with pytest.raises(PermissionError):
+        await connector.retrieve_live_data()
+
+
+@pytest.mark.asyncio
+async def test_retrieve_live_data_tolerates_partial_failure(eon_home_config, mocker):
+    connector = AsyncGridboxConnector(eon_home_config)
+    connector.gateways = MOCK_SYSTEM_IDS.copy()
+
+    results = {
+        MOCK_SYSTEM_IDS[0]: {"consumption": 1},
+        MOCK_SYSTEM_IDS[1]: RuntimeError("boom"),
+    }
+
+    async def _fake_live(system_id: str):
+        result = results[system_id]
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    mocker.patch.object(connector, "retrieve_live_data_by_id", side_effect=_fake_live)
+
+    result = await connector.retrieve_live_data()
+
+    assert result == [{"consumption": 1}]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_live_data_raises_when_all_systems_fail(eon_home_config, mocker):
+    connector = AsyncGridboxConnector(eon_home_config)
+    connector.gateways = MOCK_SYSTEM_IDS.copy()
+
+    mocker.patch.object(
+        connector,
+        "retrieve_live_data_by_id",
+        side_effect=RuntimeError("boom"),
+    )
+
+    with pytest.raises(RuntimeError):
+        await connector.retrieve_live_data()
+
+
+def test_constructor_does_not_attach_log_handlers(eon_home_config):
+    connector = AsyncGridboxConnector(eon_home_config)
+
+    assert connector.logger.handlers == []
+
+
+def test_env_vars_override_credentials(eon_home_config, monkeypatch):
+    monkeypatch.setenv("GRIDX_USERNAME", "env-user")
+    monkeypatch.setenv("GRIDX_PASSWORD", "env-pass")
+
+    connector = AsyncGridboxConnector(eon_home_config)
+
+    assert connector.username == "env-user"
+    assert connector.password == "env-pass"
+
+
+def test_generic_os_env_vars_are_ignored(eon_home_config, monkeypatch):
+    monkeypatch.setenv("USERNAME", "os-user")
+    monkeypatch.setenv("PASSWORD", "os-pass")
+
+    connector = AsyncGridboxConnector(eon_home_config)
+
+    assert connector.username == eon_home_config["login"]["username"]
+    assert connector.password == eon_home_config["login"]["password"]
 
 
 @pytest.mark.asyncio

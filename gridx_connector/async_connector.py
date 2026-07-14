@@ -11,7 +11,7 @@ from uuid import UUID
 import httpx
 
 from gridx_connector_api import AuthenticatedClient
-from gridx_connector_api.api.system.get_systems import asyncio as _get_systems_async
+from gridx_connector_api.api.system.get_systems import asyncio_detailed as _get_systems_async
 from gridx_connector_api.api.system.get_systems_system_id_historical import asyncio_detailed as _get_historical_async
 from gridx_connector_api.api.system.get_systems_system_id_live import asyncio_detailed as _get_live_async
 from gridx_connector_api.models.get_systems_system_id_historical_resolution import (
@@ -20,6 +20,8 @@ from gridx_connector_api.models.get_systems_system_id_historical_resolution impo
 
 # Base URL for all gridX REST API calls — does not change per OEM.
 _API_BASE_URL = "https://api.gridx.de"
+
+_AUTH_STATUS_CODES = (401, 403)
 
 
 class AsyncGridboxConnector:
@@ -51,8 +53,10 @@ class AsyncGridboxConnector:
         self.config = config
         self.login_url: str = config["urls"]["login"]
         self.login_body: dict[str, str] = config["login"]
-        self.username = os.getenv("USERNAME", self.login_body["username"])
-        self.password = os.getenv("PASSWORD", self.login_body["password"])
+        # GRIDX_-prefixed to avoid clashing with the generic USERNAME variable
+        # that login shells and Windows set for the current OS user.
+        self.username = os.getenv("GRIDX_USERNAME", self.login_body["username"])
+        self.password = os.getenv("GRIDX_PASSWORD", self.login_body["password"])
         self.gateways = []
         self.token = {}
         self._api_client = None
@@ -101,12 +105,10 @@ class AsyncGridboxConnector:
             )
 
     def init_logging(self) -> None:
+        # Never attach handlers here: libraries must leave handler setup to the
+        # application, otherwise embedding apps (e.g. Home Assistant) get
+        # duplicate log output. Records propagate to the root logger.
         self.logger = logging.getLogger(__name__)
-        if not self.logger.handlers:
-            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s")
-            console_handler = logging.StreamHandler()
-            console_handler.setFormatter(formatter)
-            self.logger.addHandler(console_handler)
 
     def set_loglevel(self, loglevel: str) -> None:
         self.logger.setLevel(logging.getLevelName(loglevel))
@@ -194,46 +196,82 @@ class AsyncGridboxConnector:
         return self._api_client
 
     async def get_gateway_id(self) -> None:
+        """Discover the systems linked to the account.
+
+        Raises:
+            PermissionError: If the API rejects the credentials (401/403).
+            RuntimeError: If the API returns any other non-200 status.
+
+        Network errors from the underlying HTTP client propagate unchanged.
+        """
         self.gateways.clear()
-        try:
-            systems = await _get_systems_async(client=await self._get_api_client())
-            if isinstance(systems, list):
-                for system in systems:
-                    system_id = system.additional_properties.get("id")
-                    if system_id:
-                        self.gateways.append(str(system_id))
-            self.logger.debug("Discovered %d systems.", len(self.gateways))
-        except Exception as exc:
-            self.logger.exception("Failed to discover systems: %s", exc)
+        response = await _get_systems_async(client=await self._get_api_client())
+        status = response.status_code.value
+        if status in _AUTH_STATUS_CODES:
+            raise PermissionError(f"System discovery rejected with HTTP {status}")
+        if status != 200:
+            raise RuntimeError(f"System discovery failed with HTTP {status}")
+        systems = json.loads(response.content)
+        if isinstance(systems, list):
+            for system in systems:
+                system_id = system.get("id")
+                if system_id:
+                    self.gateways.append(str(system_id))
+        self.logger.debug("Discovered %d systems.", len(self.gateways))
 
     def get_gateways(self) -> list[str]:
         return self.gateways
 
+    def _collect_results(
+        self,
+        results: list[dict[str, Any] | None | BaseException],
+        what: str,
+    ) -> list[dict[str, Any]]:
+        """Collect per-system results, tolerating partial failures.
+
+        Authentication errors always propagate so callers can re-authenticate.
+        Other errors are tolerated as long as at least one system succeeded;
+        if every system failed, the first error is raised.
+        """
+        parsed: list[dict[str, Any]] = []
+        errors: list[BaseException] = []
+        for result in results:
+            if isinstance(result, PermissionError):
+                raise result
+            if isinstance(result, BaseException):
+                errors.append(result)
+                continue
+            if result is not None:
+                parsed.append(result)
+        if errors and not parsed:
+            raise errors[0]
+        for error in errors:
+            self.logger.warning("Ignoring %s failure for one system: %s", what, error)
+        return parsed
+
     async def retrieve_live_data_by_id(self, system_id: str) -> dict[str, Any] | None:
-        try:
-            response = await _get_live_async(system_id=UUID(system_id), client=await self._get_api_client())
-            if response.status_code.value != 200:
-                self.logger.warning(f"Status Code {response.status_code.value} for system {system_id}")
-                return None
-            return json.loads(response.content)
-        except Exception as exc:
-            self.logger.error(exc)
+        """Fetch live data for one system.
+
+        Raises:
+            PermissionError: If the API rejects the credentials (401/403).
+
+        Other non-200 statuses return None; network errors propagate unchanged.
+        """
+        response = await _get_live_async(system_id=UUID(system_id), client=await self._get_api_client())
+        status = response.status_code.value
+        if status in _AUTH_STATUS_CODES:
+            raise PermissionError(f"Live data request for system {system_id} rejected with HTTP {status}")
+        if status != 200:
+            self.logger.warning(f"Status Code {status} for system {system_id}")
             return None
+        return json.loads(response.content)
 
     async def retrieve_live_data(self) -> list[dict[str, Any]]:
         tasks = [self.retrieve_live_data_by_id(system_id) for system_id in self.gateways]
         if not tasks:
             return []
         results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        parsed: list[dict[str, Any]] = []
-        for result in results:
-            if isinstance(result, Exception):
-                self.logger.error(result)
-                continue
-            if result is not None:
-                parsed.append(result)
-        return parsed
+        return self._collect_results(results, "live data")
 
     async def retrieve_historical_data_by_id(
         self,
@@ -242,26 +280,32 @@ class AsyncGridboxConnector:
         end: str,
         resolution: str = "15m",
     ) -> dict[str, Any] | None:
+        """Fetch historical data for one system.
+
+        Raises:
+            PermissionError: If the API rejects the credentials (401/403).
+
+        Other non-200 statuses return None; network errors propagate unchanged.
+        """
         interval = f"{start}/{end}"
         try:
             res_enum = GetSystemsSystemIDHistoricalResolution(resolution)
         except ValueError:
             self.logger.warning(f"Unknown resolution '{resolution}', using default '15m'")
             res_enum = GetSystemsSystemIDHistoricalResolution.VALUE_0
-        try:
-            response = await _get_historical_async(
-                system_id=UUID(system_id),
-                client=await self._get_api_client(),
-                interval=interval,
-                resolution=res_enum,
-            )
-            if response.status_code.value != 200:
-                self.logger.warning(f"Status Code {response.status_code.value} for system {system_id}")
-                return None
-            return json.loads(response.content)
-        except Exception as exc:
-            self.logger.error(exc)
+        response = await _get_historical_async(
+            system_id=UUID(system_id),
+            client=await self._get_api_client(),
+            interval=interval,
+            resolution=res_enum,
+        )
+        status = response.status_code.value
+        if status in _AUTH_STATUS_CODES:
+            raise PermissionError(f"Historical data request for system {system_id} rejected with HTTP {status}")
+        if status != 200:
+            self.logger.warning(f"Status Code {status} for system {system_id}")
             return None
+        return json.loads(response.content)
 
     async def retrieve_historical_data(
         self,
@@ -276,15 +320,7 @@ class AsyncGridboxConnector:
         if not tasks:
             return []
         results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        parsed: list[dict[str, Any]] = []
-        for result in results:
-            if isinstance(result, Exception):
-                self.logger.error(result)
-                continue
-            if result is not None:
-                parsed.append(result)
-        return parsed
+        return self._collect_results(results, "historical data")
 
     async def close(self) -> None:
         if self._httpx_client is not None and self._owns_httpx_client:
