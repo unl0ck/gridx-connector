@@ -44,6 +44,15 @@ jobs:
       - name: Build package
         run: uv build
 
+      - name: Verify build artifacts
+        run: python3 scripts/verify_build_artifacts.py
+
+      - name: Import smoke test from wheel
+        run: |
+          uv venv /tmp/smoke
+          uv pip install --python /tmp/smoke/bin/python dist/*.whl
+          /tmp/smoke/bin/python -c "import gridx_connector, gridx_connector_api"
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 
