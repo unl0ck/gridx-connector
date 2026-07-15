@@ -66,8 +66,10 @@ class GridboxConnector:
         self.login_url: str = config["urls"]["login"]
         self.login_body: dict[str, str] = config["login"]
         # Env-var overrides take precedence over values in the config file.
-        self.username = os.getenv("USERNAME", self.login_body["username"])
-        self.password = os.getenv("PASSWORD", self.login_body["password"])
+        # GRIDX_-prefixed to avoid clashing with the generic USERNAME variable
+        # that login shells and Windows set for the current OS user.
+        self.username = os.getenv("GRIDX_USERNAME", self.login_body["username"])
+        self.password = os.getenv("GRIDX_PASSWORD", self.login_body["password"])
         self.gateways = []  # instance-level list, not shared across instances
         self._api_client = None
         self._initialized = False
@@ -75,12 +77,10 @@ class GridboxConnector:
         self.init_auth()
 
     def init_logging(self) -> None:
+        # Never attach handlers here: libraries must leave handler setup to the
+        # application, otherwise embedding apps (e.g. Home Assistant) get
+        # duplicate log output. Records propagate to the root logger.
         self.logger = logging.getLogger(__name__)
-        if not self.logger.handlers:
-            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s")
-            console_handler = logging.StreamHandler()
-            console_handler.setFormatter(formatter)
-            self.logger.addHandler(console_handler)
 
     def set_loglevel(self, loglevel: str) -> None:
         self.logger.setLevel(logging.getLevelName(loglevel))
