@@ -9,6 +9,7 @@ from uuid import UUID
 
 from authlib.integrations.requests_client import OAuth2Session
 
+from gridx_connector.token_utils import user_id_from_token
 from gridx_connector_api import AuthenticatedClient
 from gridx_connector_api.api.system.get_systems import sync as _get_systems
 from gridx_connector_api.api.system.get_systems_system_id_historical import sync_detailed as _get_historical
@@ -71,6 +72,7 @@ class GridboxConnector:
         self.username = os.getenv("GRIDX_USERNAME", self.login_body["username"])
         self.password = os.getenv("GRIDX_PASSWORD", self.login_body["password"])
         self.gateways = []  # instance-level list, not shared across instances
+        self.token: dict[str, Any] = {}
         self._api_client = None
         self._initialized = False
         self._token_refresh_count = 0
@@ -189,6 +191,11 @@ class GridboxConnector:
     def get_gateways(self) -> list[str]:
         """Return the list of system IDs discovered during initialisation."""
         return self.gateways
+
+    @property
+    def user_id(self) -> str | None:
+        """Stable OIDC subject (``sub``) of the logged-in user, or None if unavailable."""
+        return user_id_from_token(self.token)
 
     def retrieve_live_data_by_id(self, system_id: str) -> dict[str, Any] | None:
         """Fetch the current measurement snapshot for a single system.

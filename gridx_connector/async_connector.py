@@ -10,6 +10,7 @@ from uuid import UUID
 
 import httpx
 
+from gridx_connector.token_utils import user_id_from_token
 from gridx_connector_api import AuthenticatedClient
 from gridx_connector_api.api.system.get_systems import asyncio_detailed as _get_systems_async
 from gridx_connector_api.api.system.get_systems_system_id_historical import asyncio_detailed as _get_historical_async
@@ -221,6 +222,11 @@ class AsyncGridboxConnector:
 
     def get_gateways(self) -> list[str]:
         return self.gateways
+
+    @property
+    def user_id(self) -> str | None:
+        """Stable OIDC subject (``sub``) of the logged-in user, or None if unavailable."""
+        return user_id_from_token(self.token)
 
     def _collect_results(
         self,
