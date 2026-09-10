@@ -68,7 +68,7 @@ def eon_home_config():
             "grant_type": "http://auth0.com/oauth/grant-type/password-realm",
             "username": "test@example.com",
             "password": "testpassword",
-            "audience": "my.gridx",
+            "audience": "https://api.gridx.de",
             "client_id": "test-client-id",
             "scope": "email openid offline_access",
             "realm": "eon-home-authentication-db",

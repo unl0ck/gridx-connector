@@ -17,7 +17,7 @@ _ALL_OEMS: list[str] = ["eon-home"]
 
 # OAuth2 defaults shared across all known gridX realms.
 _DEFAULT_GRANT_TYPE = "http://auth0.com/oauth/grant-type/password-realm"
-_DEFAULT_AUDIENCE = "my.gridx"
+_DEFAULT_AUDIENCE = "https://api.gridx.de"
 _DEFAULT_SCOPE = "email openid offline_access"
 
 

@@ -139,7 +139,7 @@ The diagram below shows the full journey from credentials to measurements.
 ┌─────────────────────────────────────────────────────────────┐
 │  2. Authenticate  (OAuth2 / Auth0)                          │
 │     GridboxConnector calls POST /oauth/token on the login   │
-│     URL with your credentials and receives an id_token.     │
+│     URL with your credentials and receives an access_token. │
 │     The token is refreshed automatically when it expires.   │
 └────────────────────────┬────────────────────────────────────┘
                          │

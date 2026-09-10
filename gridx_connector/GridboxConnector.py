@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import time
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
@@ -19,6 +20,7 @@ from gridx_connector_api.models.get_systems_system_id_historical_resolution impo
 
 # Base URL for all gridX REST API calls — does not change per OEM.
 _API_BASE_URL = "https://api.gridx.de"
+_AUTH_STATUS_CODES = (401, 403)
 
 
 class GridboxConnector:
@@ -49,6 +51,7 @@ class GridboxConnector:
     _api_client: AuthenticatedClient | None
     _initialized: bool
     _token_refresh_count: int
+    _active_token_type: str
 
     def __init__(self, config: dict[str, Any], logger: logging.Logger | None = None) -> None:
         """Initialise the connector.
@@ -74,6 +77,7 @@ class GridboxConnector:
         self._api_client = None
         self._initialized = False
         self._token_refresh_count = 0
+        self._active_token_type = "id_token"
         self.init_auth()
 
     def init_logging(self) -> None:
@@ -107,17 +111,61 @@ class GridboxConnector:
             realm=self.login_body["realm"],
             scope=self.login_body["scope"],
         )
-        # Recreate the httpx-based client with the new id_token as bearer.
-        self._api_client = AuthenticatedClient(
-            base_url=_API_BASE_URL,
-            token=self.token["id_token"],
-            raise_on_unexpected_status=False,
-        )
+        if not self._set_api_client():
+            raise RuntimeError("Token response did not contain access_token or id_token")
 
         expires_at = self.token.get("expires_at")
         if expires_at is not None:
             ttl_seconds = max(0, int(float(expires_at) - time.time()))
             self.logger.debug("Token acquired successfully (expires in %ss).", ttl_seconds)
+
+    def _set_api_client(self, token_type: str | None = None) -> bool:
+        if token_type is None:
+            token_type = "access_token" if self.token.get("access_token") else "id_token"
+        bearer = self.token.get(token_type)
+        if not bearer:
+            return False
+        self._api_client = AuthenticatedClient(
+            base_url=_API_BASE_URL,
+            token=bearer,
+            raise_on_unexpected_status=False,
+        )
+        self._active_token_type = token_type
+        return True
+
+    @staticmethod
+    def _status_code(value: Any) -> int | None:
+        status_code = getattr(value, "status_code", None)
+        if status_code is None:
+            response = getattr(value, "response", None)
+            status_code = getattr(response, "status_code", None)
+        status_code = getattr(status_code, "value", status_code)
+        try:
+            return int(status_code) if status_code is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _is_auth_error(cls, value: Any) -> bool:
+        return cls._status_code(value) in _AUTH_STATUS_CODES
+
+    def _request_with_token_fallback(self, request: Callable[..., Any], **kwargs: Any) -> Any:
+        client = self._get_api_client()
+        token_type = self._active_token_type
+        try:
+            response = request(client=client, **kwargs)
+        except Exception as error:
+            if token_type != "access_token" or not self._is_auth_error(error) or not self._set_api_client("id_token"):
+                raise
+            self.logger.warning("Access token rejected; retrying request with ID token.")
+            assert self._api_client is not None
+            return request(client=self._api_client, **kwargs)
+
+        if token_type == "access_token" and self._is_auth_error(response) and self._set_api_client("id_token"):
+            self.logger.warning("Access token rejected; retrying request with ID token.")
+            assert self._api_client is not None
+            response = request(client=self._api_client, **kwargs)
+        return response
 
     def ensure_valid_token(self) -> None:
         """Refresh the token when it has expired or is not yet set."""
@@ -173,7 +221,7 @@ class GridboxConnector:
         """
         self.gateways.clear()
         try:
-            systems = _get_systems(client=self._get_api_client())
+            systems = self._request_with_token_fallback(_get_systems)
             if isinstance(systems, list):
                 for system in systems:
                     # The generated model stores extra fields in additional_properties.
@@ -202,7 +250,7 @@ class GridboxConnector:
         manually with ``json.loads``.
         """
         try:
-            response = _get_live(system_id=UUID(system_id), client=self._get_api_client())
+            response = self._request_with_token_fallback(_get_live, system_id=UUID(system_id))
             if response.status_code.value != 200:
                 self.logger.warning(f"Status Code {response.status_code.value} for system {system_id}")
                 return None
@@ -256,9 +304,9 @@ class GridboxConnector:
             self.logger.warning(f"Unknown resolution '{resolution}', using default '15m'")
             res_enum = GetSystemsSystemIDHistoricalResolution.VALUE_0
         try:
-            response = _get_historical(
+            response = self._request_with_token_fallback(
+                _get_historical,
                 system_id=UUID(system_id),
-                client=self._get_api_client(),
                 interval=interval,
                 resolution=res_enum,
             )

@@ -15,6 +15,7 @@ def _mock_token_response(mocker):
     response = mocker.Mock()
     response.raise_for_status.return_value = None
     response.json.return_value = {
+        "access_token": "async-access-token",
         "id_token": "async-token",
         "expires_in": 3600,
         "expires_at": time.time() + 3600,
@@ -259,6 +260,39 @@ async def test_get_new_token_uses_injected_httpx_client(eon_home_config, mocker)
 
     injected_client.post.assert_awaited_once()
     assert connector._api_client is not None
+
+
+@pytest.mark.asyncio
+async def test_access_token_is_used_for_api_client(eon_home_config, mocker):
+    injected_client = mocker.AsyncMock()
+    injected_client.post.return_value = _mock_token_response(mocker)
+    connector = AsyncGridboxConnector(eon_home_config, httpx_client=injected_client)
+    await connector.get_new_token()
+
+    assert connector._active_token_type == "access_token"
+    assert connector._api_client.token == "async-access-token"
+
+
+@pytest.mark.asyncio
+async def test_id_token_fallback_is_used_once_after_auth_error(eon_home_config, mocker):
+    connector = AsyncGridboxConnector(eon_home_config)
+    connector.token = {
+        "access_token": "async-access-token",
+        "id_token": "async-id-token",
+        "expires_at": time.time() + 3600,
+    }
+    connector._set_api_client()
+    rejected = _mock_api_response(mocker, {}, status=401)
+    accepted = _mock_api_response(mocker, {}, status=200)
+    request = mocker.AsyncMock(side_effect=[rejected, accepted])
+
+    result = await connector._request_with_token_fallback(request, endpoint="/test")
+
+    assert result is accepted
+    assert request.await_count == 2
+    assert request.await_args_list[0].kwargs["client"].token == "async-access-token"
+    assert request.await_args_list[1].kwargs["client"].token == "async-id-token"
+    assert connector._active_token_type == "id_token"
 
 
 @pytest.mark.asyncio

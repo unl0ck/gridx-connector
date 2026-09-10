@@ -130,7 +130,7 @@ class TestLoginUrl:
         assert config["urls"]["login"] == "https://gridx.eu.auth0.com/oauth/token"
         assert config["login"]["client_id"] == "abc123"
         assert config["login"]["realm"] == "my-realm"
-        assert config["login"]["audience"] == "my.gridx"
+        assert config["login"]["audience"] == "https://api.gridx.de"
         assert config["login"]["username"] == "user@example.com"
 
     def test_build_config_custom_audience(self):

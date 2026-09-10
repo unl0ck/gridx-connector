@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urljoin, urlparse
 import requests
 
 DEFAULT_GRANT_TYPE = "http://auth0.com/oauth/grant-type/password-realm"
-DEFAULT_AUDIENCE = "my.gridx"
+DEFAULT_AUDIENCE = "https://api.gridx.de"
 DEFAULT_SCOPE = "email openid offline_access"
 
 

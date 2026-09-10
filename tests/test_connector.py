@@ -62,6 +62,23 @@ class TestTokenHandling:
 
         assert isinstance(connector._api_client, AuthenticatedClient)
 
+    def test_access_token_is_used_for_api_client(self, connector):
+        assert connector._active_token_type == "access_token"
+        assert connector._api_client.token == MOCK_TOKEN["access_token"]
+
+    def test_id_token_fallback_is_used_once_after_auth_error(self, connector, mocker):
+        rejected = _make_mock_response(mocker, {}, status=401)
+        accepted = _make_mock_response(mocker, {}, status=200)
+        request = mocker.Mock(side_effect=[rejected, accepted])
+
+        result = connector._request_with_token_fallback(request, endpoint="/test")
+
+        assert result is accepted
+        assert request.call_count == 2
+        assert request.call_args_list[0].kwargs["client"].token == MOCK_TOKEN["access_token"]
+        assert request.call_args_list[1].kwargs["client"].token == MOCK_TOKEN["id_token"]
+        assert connector._active_token_type == "id_token"
+
 
 class TestLiveData:
     def test_retrieve_live_data_returns_list(self, connector):

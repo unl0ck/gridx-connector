@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import time
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
@@ -38,6 +39,7 @@ class AsyncGridboxConnector:
     _owns_httpx_client: bool
     _initialized: bool
     _token_refresh_count: int
+    _active_token_type: str
 
     def __init__(
         self,
@@ -64,6 +66,7 @@ class AsyncGridboxConnector:
         self._owns_httpx_client = owns_httpx_client
         self._initialized = False
         self._token_refresh_count = 0
+        self._active_token_type = "id_token"
         self._token_lock = asyncio.Lock()
         self._init_lock = asyncio.Lock()
 
@@ -147,26 +150,66 @@ class AsyncGridboxConnector:
         if expires_at is None and token.get("expires_in") is not None:
             token["expires_at"] = time.time() + float(token["expires_in"])
 
-        bearer = token.get("id_token") or token.get("access_token")
-        if not bearer:
-            raise RuntimeError("Token response did not contain id_token or access_token")
-
         self.token = token
+        if not self._set_api_client():
+            raise RuntimeError("Token response did not contain access_token or id_token")
+
+        if token.get("expires_at"):
+            ttl_seconds = max(0, int(float(token["expires_at"]) - time.time()))
+            self.logger.debug("Token acquired successfully (expires in %ss).", ttl_seconds)
+
+    def _set_api_client(self, token_type: str | None = None) -> bool:
+        if token_type is None:
+            token_type = "access_token" if self.token.get("access_token") else "id_token"
+        bearer = self.token.get(token_type)
+        if not bearer:
+            return False
         self._api_client = AuthenticatedClient(
             base_url=_API_BASE_URL,
             token=bearer,
             raise_on_unexpected_status=False,
         )
+        self._active_token_type = token_type
 
         if self._httpx_client is not None:
-            # Reuse injected client for API calls and update auth header on refresh.
             auth_value = f"{self._api_client.prefix} {self._api_client.token}"
             self._httpx_client.headers[self._api_client.auth_header_name] = auth_value
             self._api_client.set_async_httpx_client(self._httpx_client)
+        return True
 
-        if token.get("expires_at"):
-            ttl_seconds = max(0, int(float(token["expires_at"]) - time.time()))
-            self.logger.debug("Token acquired successfully (expires in %ss).", ttl_seconds)
+    @staticmethod
+    def _status_code(value: Any) -> int | None:
+        status_code = getattr(value, "status_code", None)
+        if status_code is None:
+            response = getattr(value, "response", None)
+            status_code = getattr(response, "status_code", None)
+        status_code = getattr(status_code, "value", status_code)
+        try:
+            return int(status_code) if status_code is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _is_auth_error(cls, value: Any) -> bool:
+        return cls._status_code(value) in _AUTH_STATUS_CODES
+
+    async def _request_with_token_fallback(self, request: Callable[..., Any], **kwargs: Any) -> Any:
+        client = await self._get_api_client()
+        token_type = self._active_token_type
+        try:
+            response = await request(client=client, **kwargs)
+        except Exception as error:
+            if token_type != "access_token" or not self._is_auth_error(error) or not self._set_api_client("id_token"):
+                raise
+            self.logger.warning("Access token rejected; retrying request with ID token.")
+            assert self._api_client is not None
+            return await request(client=self._api_client, **kwargs)
+
+        if token_type == "access_token" and self._is_auth_error(response) and self._set_api_client("id_token"):
+            self.logger.warning("Access token rejected; retrying request with ID token.")
+            assert self._api_client is not None
+            response = await request(client=self._api_client, **kwargs)
+        return response
 
     async def ensure_valid_token(self) -> None:
         expires_at = self.token.get("expires_at")
@@ -205,7 +248,7 @@ class AsyncGridboxConnector:
         Network errors from the underlying HTTP client propagate unchanged.
         """
         self.gateways.clear()
-        response = await _get_systems_async(client=await self._get_api_client())
+        response = await self._request_with_token_fallback(_get_systems_async)
         status = response.status_code.value
         if status in _AUTH_STATUS_CODES:
             raise PermissionError(f"System discovery rejected with HTTP {status}")
@@ -257,7 +300,7 @@ class AsyncGridboxConnector:
 
         Other non-200 statuses return None; network errors propagate unchanged.
         """
-        response = await _get_live_async(system_id=UUID(system_id), client=await self._get_api_client())
+        response = await self._request_with_token_fallback(_get_live_async, system_id=UUID(system_id))
         status = response.status_code.value
         if status in _AUTH_STATUS_CODES:
             raise PermissionError(f"Live data request for system {system_id} rejected with HTTP {status}")
@@ -293,9 +336,9 @@ class AsyncGridboxConnector:
         except ValueError:
             self.logger.warning(f"Unknown resolution '{resolution}', using default '15m'")
             res_enum = GetSystemsSystemIDHistoricalResolution.VALUE_0
-        response = await _get_historical_async(
+        response = await self._request_with_token_fallback(
+            _get_historical_async,
             system_id=UUID(system_id),
-            client=await self._get_api_client(),
             interval=interval,
             resolution=res_enum,
         )

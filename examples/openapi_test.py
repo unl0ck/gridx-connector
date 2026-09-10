@@ -28,7 +28,10 @@ class GridboxConnector:
         self.logger = logging.getLogger(__name__)
         self._init_oauth()
         self._fetch_token()
-        self.client = AuthenticatedClient(base_url="https://api.gridx.de", token=self.token["id_token"])
+        self.client = AuthenticatedClient(
+            base_url="https://api.gridx.de",
+            token=self.token.get("access_token") or self.token["id_token"],
+        )
         self.get_gateways()
 
     def _init_oauth(self):
@@ -114,7 +117,10 @@ class GridboxConnector:
 
     def get_client(self) -> AuthenticatedClient:
         if self.client is None:
-            self.client = AuthenticatedClient(base_url="https://api.gridx.de", token=self.token["id_token"])
+            self.client = AuthenticatedClient(
+                base_url="https://api.gridx.de",
+                token=self.token.get("access_token") or self.token["id_token"],
+            )
         return self.client
 
     def get_token(self) -> dict:

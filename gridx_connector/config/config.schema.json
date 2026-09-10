@@ -57,7 +57,7 @@
                     "type": "string",
                     "description": "OAuth2 audience.",
                     "examples": [
-                        "my.gridx"
+                        "https://api.gridx.de"
                     ]
                 },
                 "client_id": {
