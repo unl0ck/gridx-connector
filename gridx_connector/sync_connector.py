@@ -18,8 +18,9 @@ from gridx_connector_api.models.get_systems_system_id_historical_resolution impo
     GetSystemsSystemIDHistoricalResolution,
 )
 
-# Base URL for all gridX REST API calls — does not change per OEM.
-_API_BASE_URL = "https://api.gridx.de"
+from .exceptions import GridXResponseError
+from .oem import API_BASE_URL as _API_BASE_URL
+
 _AUTH_STATUS_CODES = (401, 403)
 
 
@@ -56,10 +57,9 @@ class GridboxConnector:
     def __init__(self, config: dict[str, Any], logger: logging.Logger | None = None) -> None:
         """Initialise the connector.
 
-        Reads credentials from ``config["login"]`` but allows the
-        ``USERNAME`` / ``PASSWORD`` environment variables to override them
-        so that secrets can be injected at runtime without modifying the
-        config file.
+        Reads credentials from ``config["login"]``. The ``GRIDX_USERNAME`` /
+        ``GRIDX_PASSWORD`` environment variables are only used for values the
+        config leaves empty.
         """
         if logger:
             self.logger = logger
@@ -68,11 +68,10 @@ class GridboxConnector:
         self.config = config
         self.login_url: str = config["urls"]["login"]
         self.login_body: dict[str, str] = config["login"]
-        # Env-var overrides take precedence over values in the config file.
-        # GRIDX_-prefixed to avoid clashing with the generic USERNAME variable
-        # that login shells and Windows set for the current OS user.
-        self.username = os.getenv("GRIDX_USERNAME", self.login_body["username"])
-        self.password = os.getenv("GRIDX_PASSWORD", self.login_body["password"])
+        # Explicit configuration wins; the GRIDX_-prefixed environment
+        # variables only fill in values the config leaves empty.
+        self.username = self.login_body.get("username") or os.getenv("GRIDX_USERNAME", "")
+        self.password = self.login_body.get("password") or os.getenv("GRIDX_PASSWORD", "")
         self.gateways = []  # instance-level list, not shared across instances
         self._api_client = None
         self._initialized = False
@@ -104,15 +103,15 @@ class GridboxConnector:
 
         self.token = self.client.fetch_token(
             self.login_url,
-            username=self.login_body["username"],
-            password=self.login_body["password"],
+            username=self.username,
+            password=self.password,
             grant_type=self.login_body["grant_type"],
             audience=self.login_body["audience"],
             realm=self.login_body["realm"],
             scope=self.login_body["scope"],
         )
         if not self._set_api_client():
-            raise RuntimeError("Token response did not contain access_token or id_token")
+            raise GridXResponseError("Token response did not contain access_token or id_token")
 
         expires_at = self.token.get("expires_at")
         if expires_at is not None:

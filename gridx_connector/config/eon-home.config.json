@@ -5,8 +5,8 @@
   },
   "login": {
     "grant_type": "http://auth0.com/oauth/grant-type/password-realm",
-    "username": "username",
-    "password": "password!",
+    "username": "",
+    "password": "",
     "audience": "https://api.gridx.de",
     "client_id": "mG0Phmo7DmnvAqO7p6B0WOYBODppY3cc",
     "scope": "email openid offline_access",
