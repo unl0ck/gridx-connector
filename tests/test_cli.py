@@ -1,7 +1,6 @@
 """Tests for the CLI entry point."""
 
 import inspect
-import json
 import sys
 import warnings
 
@@ -85,33 +84,11 @@ class TestRetrieveLiveData:
         main()
         load_mock.assert_called_once_with("eon-home", "testuser", "testpass")
 
-    def test_viessmann_emits_deprecation_warning(self, mocker, tmp_path):
+    def test_viessmann_emits_deprecation_warning(self, mocker):
         """retrieve_live_data warns when oem='viessmann'."""
-        config_data = {
-            "urls": {
-                "login": "https://example.com/token",
-            },
-            "login": {
-                "grant_type": "pw",
-                "username": "",
-                "password": "",
-                "audience": "x",
-                "client_id": "x",
-                "scope": "x",
-                "realm": "x",
-                "client_secret": "",
-            },
-        }
-        cfg_file = tmp_path / "viessmann.config.json"
-        cfg_file.write_text(json.dumps(config_data))
-
         mock_connector = mocker.MagicMock()
         mock_connector.retrieve_live_data.return_value = []
         mocker.patch("gridx_connector.cli.GridboxConnector", return_value=mock_connector)
-
-        resource_mock = mocker.MagicMock()
-        resource_mock.joinpath.return_value = str(cfg_file)
-        mocker.patch("gridx_connector.cli.files", return_value=resource_mock)
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")

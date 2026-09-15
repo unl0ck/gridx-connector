@@ -81,13 +81,13 @@ def eon_home_config():
 def mock_api(mocker):
     """Patch all gridx_connector_api functions used by GridboxConnector."""
     systems = [_make_mock_system(mocker, sid) for sid in MOCK_SYSTEM_IDS]
-    mocker.patch("gridx_connector.GridboxConnector._get_systems", return_value=systems)
+    mocker.patch("gridx_connector.sync_connector._get_systems", return_value=systems)
     mocker.patch(
-        "gridx_connector.GridboxConnector._get_live",
+        "gridx_connector.sync_connector._get_live",
         return_value=_make_mock_response(mocker, MOCK_LIVE_DATA),
     )
     mocker.patch(
-        "gridx_connector.GridboxConnector._get_historical",
+        "gridx_connector.sync_connector._get_historical",
         return_value=_make_mock_response(mocker, MOCK_HISTORICAL_DATA),
     )
 

@@ -75,16 +75,10 @@ gridx -u your@email.com -p yourpassword > live.json
 ### As a library
 
 ```python
-from gridx_connector import GridboxConnector, SupportedOEM
-from importlib.resources import files
-import json
+from gridx_connector import GridboxConnector, build_login_config
 
-config_file = files("gridx_connector").joinpath("config", f"{SupportedOEM.EON_HOME}.config.json")
-with open(config_file) as f:
-    config = json.load(f)
-
-config["login"]["username"] = "your@email.com"
-config["login"]["password"] = "yourpassword"
+# Realm, client id and audience for the OEM are defined in the library.
+config = build_login_config("your@email.com", "yourpassword")
 
 connector = GridboxConnector(config)
 
@@ -200,12 +194,39 @@ for entry in historical:
         print(bucket["measuredAt"], "→", bucket["photovoltaic"], "W")
 ```
 
+### Async usage and errors
+
+```python
+from gridx_connector import (
+    AsyncGridboxConnector,
+    GridXAuthenticationError,
+    GridXConnectionError,
+    GridXError,
+    build_login_config,
+)
+
+async with AsyncGridboxConnector(build_login_config("your@email.com", "yourpassword")) as connector:
+    try:
+        live = await connector.get_live_data()  # {system_id: measurement}, fails if any system fails
+    except GridXAuthenticationError:
+        ...  # wrong credentials or token rejected (HTTP 401/403)
+    except GridXConnectionError:
+        ...  # network problem or timeout
+    except GridXError:
+        ...  # unexpected status or payload (GridXResponseError)
+    for system_id, measurement in live.items():
+        print(connector.systems[system_id].name, measurement["photovoltaic"])
+```
+
+`retrieve_live_data()` keeps the old list-based, partial-failure-tolerant behaviour. The bearer token is
+sent per request, so an injected `httpx.AsyncClient` is never modified.
+
 ### Credential handling
 
 | Option | How |
 |---|---|
 | Config file | Set `login.username` / `login.password` in `eon-home.config.json` |
-| Environment variables | Export `GRIDX_USERNAME=...` and `GRIDX_PASSWORD=...` — these override the config file |
+| Environment variables | Export `GRIDX_USERNAME=...` and `GRIDX_PASSWORD=...` — used only for values the config leaves empty (explicit config wins) |
 | CLI | Pass `-u <user> -p <pass>` on the command line |
 
 ### Discover OAuth config automatically
