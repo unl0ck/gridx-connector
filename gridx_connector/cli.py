@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Any
 
 from .async_connector import AsyncGridboxConnector
-from .sync_connector import GridboxConnector
 from .oem import build_login_config
 from .supported_oem import SupportedOEM
+from .sync_connector import GridboxConnector
 
 _ALL_OEMS: list[str] = ["eon-home"]
 
