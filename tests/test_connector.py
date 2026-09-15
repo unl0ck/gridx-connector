@@ -100,7 +100,7 @@ class TestLiveData:
     def test_retrieve_live_data_by_id_logs_on_error_status(self, connector, mocker, caplog):
         mock_response = mocker.Mock()
         mock_response.status_code = HTTPStatus(403)
-        mocker.patch("gridx_connector.GridboxConnector._get_live", return_value=mock_response)
+        mocker.patch("gridx_connector.sync_connector._get_live", return_value=mock_response)
         import logging
 
         with caplog.at_level(logging.WARNING):
@@ -109,7 +109,7 @@ class TestLiveData:
         assert "403" in caplog.text
 
     def test_retrieve_live_data_by_id_returns_none_on_exception(self, connector, mocker):
-        mocker.patch("gridx_connector.GridboxConnector._get_live", side_effect=RuntimeError("network error"))
+        mocker.patch("gridx_connector.sync_connector._get_live", side_effect=RuntimeError("network error"))
         result = connector.retrieve_live_data_by_id("11111111-1111-1111-1111-111111111111")
         assert result is None
 
@@ -129,7 +129,7 @@ class TestHistoricalData:
         )
 
         mock_patch = mocker.patch(
-            "gridx_connector.GridboxConnector._get_historical",
+            "gridx_connector.sync_connector._get_historical",
             return_value=_make_mock_response(mocker, MOCK_HISTORICAL_DATA),
         )
         connector.retrieve_historical_data(start="2023-01-01T00:00:00Z", end="2023-01-02T00:00:00Z")
@@ -142,7 +142,7 @@ class TestHistoricalData:
         )
 
         mock_patch = mocker.patch(
-            "gridx_connector.GridboxConnector._get_historical",
+            "gridx_connector.sync_connector._get_historical",
             return_value=_make_mock_response(mocker, MOCK_HISTORICAL_DATA),
         )
         connector.retrieve_historical_data(
@@ -159,7 +159,7 @@ class TestHistoricalData:
         )
 
         mock_patch = mocker.patch(
-            "gridx_connector.GridboxConnector._get_historical",
+            "gridx_connector.sync_connector._get_historical",
             return_value=_make_mock_response(mocker, MOCK_HISTORICAL_DATA),
         )
         connector.retrieve_historical_data(

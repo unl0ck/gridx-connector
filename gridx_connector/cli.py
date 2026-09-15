@@ -4,14 +4,13 @@ import argparse
 import asyncio
 import json
 import sys
-import warnings
-from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
 from .async_connector import AsyncGridboxConnector
-from .GridboxConnector import GridboxConnector
+from .oem import build_login_config
 from .supported_oem import SupportedOEM
+from .sync_connector import GridboxConnector
 
 _ALL_OEMS: list[str] = ["eon-home"]
 
@@ -22,19 +21,8 @@ _DEFAULT_SCOPE = "email openid offline_access"
 
 
 def _load_oem_config(oem: str, username: str, password: str) -> dict[str, Any]:
-    """Load a bundled OEM config and inject credentials."""
-    if oem == "viessmann":
-        warnings.warn(
-            "The Viessmann realm was shut down at end of 2025. Support for 'viessmann' OEM is deprecated.",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-    config_file = files("gridx_connector").joinpath("config", f"{oem}.config.json")
-    with open(config_file) as fh:
-        config: dict[str, Any] = json.load(fh)
-    config["login"]["username"] = username
-    config["login"]["password"] = password
-    return config
+    """Build the bundled OEM config with the given credentials."""
+    return build_login_config(username, password, oem)
 
 
 def _build_config(
@@ -156,8 +144,8 @@ def main() -> None:
     if args.save_config:
         save_path = Path(args.save_config)
         saveable = json.loads(json.dumps(config))
-        saveable["login"]["username"] = "your@email.com"
-        saveable["login"]["password"] = "yourpassword"
+        saveable["login"]["username"] = ""
+        saveable["login"]["password"] = ""
         save_path.write_text(json.dumps(saveable, indent=2))
         print(f"Config saved to {save_path}", file=sys.stderr)
 

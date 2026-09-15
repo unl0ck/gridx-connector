@@ -47,11 +47,11 @@
                 },
                 "username": {
                     "type": "string",
-                    "description": "Overridden at runtime via GRIDX_USERNAME env var."
+                    "description": "Leave empty to fall back to the GRIDX_USERNAME env var."
                 },
                 "password": {
                     "type": "string",
-                    "description": "Overridden at runtime via GRIDX_PASSWORD env var."
+                    "description": "Leave empty to fall back to the GRIDX_PASSWORD env var."
                 },
                 "audience": {
                     "type": "string",
